@@ -13,12 +13,10 @@ realistic JSON payloads for testing the API
 Purpose
 
 generate request bodies
-
 generate response examples
-
 generate edge cases
 
-This solves a real problem. Writing mock payloads for APIs is tedious and repetitive.
+_This solves a real problem. Writing mock payloads for APIs is tedious and repetitive._
 
 ## Simple architecture (good for a notebook)
 
@@ -39,12 +37,13 @@ Step 1 — parse OpenAPI
 
 Extract:
 
-endpoints
-request schema
-response schema
+- endpoints
+- request schemas
+- response schemas
 
 Example schema:
 
+``` json
 {
   "User": {
     "id": "integer",
@@ -53,6 +52,8 @@ Example schema:
     "created_at": "datetime"
   }
 }
+
+```
 
 Step 2 — prompt template
 
@@ -157,15 +158,15 @@ That’s a very clean assignment report.
 
 It shows:
 
-* LLM prompting
+- LLM prompting
 
-* structured generation
+- structured generation
 
-* evaluation
+- evaluation
 
-* model comparison
+- model comparison
 
-* quantization effects
+- quantization effects
 
 And it's directly relevant to software engineering.
 Interviewers love things like this.
