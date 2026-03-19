@@ -16,7 +16,7 @@ Takes an OpenAPI specification, extracts request body schemas, and uses quantize
 ## Models compared
 
 | Model | Params | Valid JSON | Schema Match | Notes |
-|-------|--------|-----------|--------------|-------|
+| :-------: | :--------: | :-----------: | :--------------: | :-------: |
 | Llama 3.1 8B Instruct | 8B | Yes | Yes | Best results — clean arrays, correct structure |
 | Qwen 2.5 Coder 7B Instruct | 7B | Yes | Yes | Concise single-object output |
 | Phi 4 Mini Instruct | 3.8B | Yes | No | Echoes schema definition, nests data under `"data"` key |
@@ -27,7 +27,7 @@ All models quantized to 4-bit (NF4) via BitsAndBytes. Tested with a minimal prom
 
 Requires an NVIDIA GPU with CUDA support. Install CUDA-enabled PyTorch first, then dependencies without resolving torch:
 
-```
+```bash
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
 pip install --no-deps accelerate bitsandbytes transformers huggingface_hub[hf_xet]
 ```
