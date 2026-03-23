@@ -21,7 +21,7 @@ AVERAGE_CHUNK_SIZE = 100
 wait = wait_exponential(multiplier=1, min=10, max=240)
 
 
-WORKERS = 3
+WORKERS = 10
 
 openai = OpenAI()
 
