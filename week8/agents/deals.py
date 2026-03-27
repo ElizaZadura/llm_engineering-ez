@@ -34,6 +34,21 @@ def extract(html_snippet: str) -> str:
     return result.replace("\n", " ")
 
 
+def features_from_feed_html(html: str) -> str | None:
+    """
+    DealNews RSS items embed a features block in the description HTML, e.g.
+    div.snippet.features with content-section-header / content-section-list.
+    Returns None if the feed entry has no features snippet.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    el = soup.select_one("div.snippet.features")
+    if el is None:
+        return None
+    text = el.get_text(" ", strip=True)
+    text = re.sub(r"^features\s*", "", text, flags=re.IGNORECASE)
+    return text.replace("\n", " ").strip()
+
+
 class ScrapedDeal:
     """
     A class to represent a Deal retrieved from an RSS feed
@@ -51,17 +66,33 @@ class ScrapedDeal:
         Populate this instance based on the provided dict
         """
         self.title = entry["title"]
-        self.summary = extract(entry["summary"])
+        raw_summary = entry["summary"]
+        self.summary = extract(raw_summary)
         self.url = entry["links"][0]["href"]
-        stuff = requests.get(self.url).content
-        soup = BeautifulSoup(stuff, "html.parser")
-        content = soup.find("div", class_="content-section").get_text()
-        content = content.replace("\nmore", "").replace("\n", " ")
-        if "Features" in content:
-            self.details, self.features = content.split("Features", 1)
+        feed_features = features_from_feed_html(raw_summary)
+        if feed_features is not None:
+            self.details = self.summary
+            self.features = feed_features
         else:
-            self.details = content
-            self.features = ""
+            stuff = requests.get(self.url).content
+            soup = BeautifulSoup(stuff, "html.parser")
+            section = soup.find("div", class_="content-section")
+            if section is not None:
+                content = section.get_text()
+            else:
+                article = soup.find("article")
+                main = soup.find("main")
+                candidate = article or main
+                if candidate is not None:
+                    content = candidate.get_text()
+                else:
+                    content = self.summary
+            content = content.replace("\nmore", "").replace("\n", " ")
+            if "Features" in content:
+                self.details, self.features = content.split("Features", 1)
+            else:
+                self.details = content
+                self.features = ""
         self.truncate()
 
     def truncate(self):
