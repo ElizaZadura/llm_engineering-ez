@@ -215,3 +215,4 @@ week6/*.joblib
 week8/*.pth
 /denver_extract.mp3
 /.specstory
+/week8/products_vectorstore_bucket
