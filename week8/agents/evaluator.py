@@ -192,6 +192,68 @@ class Tester:
 
         fig.show()
 
+    def worst_miss_indices(self, n=20):
+        return sorted(
+            range(len(self.errors)), key=lambda i: self.errors[i], reverse=True
+        )[:n]
+
+    def worst_misses(self, n=20):
+        top_indices = self.worst_miss_indices(n)
+        df = pd.DataFrame(
+            {
+                "title": [self.titles[i] for i in top_indices],
+                "guess": [self.guesses[i] for i in top_indices],
+                "truth": [self.truths[i] for i in top_indices],
+                "error": [self.errors[i] for i in top_indices],
+                "error_pct": [
+                    (self.errors[i] / self.truths[i] * 100) if self.truths[i] else 0
+                    for i in top_indices
+                ],
+            }
+        ).reset_index(drop=True)
+        df.index += 1
+
+        df_display = df.copy()
+        df_display["guess"] = df_display["guess"].map("${:,.2f}".format)
+        df_display["truth"] = df_display["truth"].map("${:,.2f}".format)
+        df_display["error"] = df_display["error"].map("${:,.2f}".format)
+        df_display["error_pct"] = df_display["error_pct"].map("{:.1f}%".format)
+        df_display.columns = ["Title", "Predicted", "Actual", "Error ($)", "Error (%)"]
+
+        fig = go.Figure(
+            data=[
+                go.Table(
+                    columnwidth=[350, 110, 110, 110, 100],
+                    header=dict(
+                        values=[f"<b>{c}</b>" for c in df_display.columns],
+                        fill_color="steelblue",
+                        font=dict(color="white", size=13),
+                        align="left",
+                        height=32,
+                    ),
+                    cells=dict(
+                        values=[df_display[c].tolist() for c in df_display.columns],
+                        fill_color=[
+                            [
+                                "#f9f9f9" if i % 2 == 0 else "white"
+                                for i in range(len(df_display))
+                            ]
+                        ],
+                        align="left",
+                        height=28,
+                        font=dict(size=12),
+                    ),
+                )
+            ]
+        )
+        fig.update_layout(
+            title=f"{self.title} — {n} Worst Misses",
+            width=1000,
+            height=80 + n * 30,
+            margin=dict(l=10, r=10, t=50, b=10),
+        )
+        fig.show()
+
     def report(self):
         average_error = sum(self.errors) / self.size
         mse = mean_squared_error(self.truths, self.guesses)
@@ -199,6 +261,7 @@ class Tester:
         title = f"{self.title} results<br><b>Error:</b> ${average_error:,.2f} <b>MSE:</b> {mse:,.0f} <b>r²:</b> {r2:.1f}%"
         self.error_trend_chart()
         self.chart(title)
+        self.worst_misses()
 
     def run(self):
         with ThreadPoolExecutor(max_workers=self.workers) as ex:
@@ -215,4 +278,6 @@ class Tester:
 
 
 def evaluate(function, data, size=DEFAULT_SIZE, workers=WORKERS):
-    Tester(function, data, size=size, workers=workers).run()
+    tester = Tester(function, data, size=size, workers=workers)
+    tester.run()
+    return tester

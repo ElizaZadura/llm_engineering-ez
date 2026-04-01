@@ -1,4 +1,5 @@
 import os
+import re
 from agents.deals import Opportunity
 from agents.agent import Agent
 from litellm import completion
@@ -11,6 +12,19 @@ class MessagingAgent(Agent):
     name = "Messaging Agent"
     color = Agent.WHITE
     MODEL = "claude-sonnet-4-5"
+
+    @staticmethod
+    def _anthropic_api_base():
+        """
+        Normalize Anthropic api base so LiteLLM can append /v1/messages safely.
+        """
+        api_base = os.getenv("ANTHROPIC_API_BASE") or os.getenv("ANTHROPIC_BASE_URL")
+        if not api_base:
+            return None
+        cleaned = api_base.strip().rstrip("/")
+        # If users set .../v1 in .env, LiteLLM will otherwise create .../v1//v1/messages.
+        cleaned = re.sub(r"/v1$", "", cleaned)
+        return cleaned
 
     def __init__(self):
         """
@@ -54,11 +68,17 @@ class MessagingAgent(Agent):
         user_prompt = "Please summarize this great deal in 2-3 sentences to be sent as an exciting push notification alerting the user about this deal.\n"
         user_prompt += f"Item Description: {description}\nOffered Price: {deal_price}\nEstimated true value: {estimated_true_value}"
         user_prompt += "\n\nRespond only with the 2-3 sentence message which will be used to alert & excite the user about this deal"
+        completion_kwargs = {}
+        anthropic_api_base = self._anthropic_api_base()
+        if anthropic_api_base:
+            completion_kwargs["api_base"] = anthropic_api_base
+
         response = completion(
             model=self.MODEL,
             messages=[
                 {"role": "user", "content": user_prompt},
             ],
+            **completion_kwargs,
         )
         return response.choices[0].message.content
 
