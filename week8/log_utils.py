@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 import pandas as pd
@@ -298,3 +299,112 @@ def best_run_so_far(history_path: str = "logs/run_history.jsonl") -> dict | None
         f"(run={best.get('run', 'n/a')}, predictor={best.get('predictor', 'n/a')})"
     )
     return best
+
+
+def _to_float_price(value) -> float:
+    """Convert model output (str/number) into a float price."""
+    if isinstance(value, str):
+        cleaned = value.replace("$", "").replace(",", "")
+        match = re.search(r"[-+]?\d*\.\d+|\d+", cleaned)
+        return float(match.group()) if match else 0.0
+    return float(value)
+
+
+def cache_component_predictions(
+    items,
+    rag_fn,
+    specialist_fn,
+    dnn_fn,
+    cache_path: str = "logs/val_component_preds.csv",
+    size: int | None = None,
+    start_at: int = 0,
+    append: bool = False,
+    progress_every: int = 25,
+) -> pd.DataFrame:
+    """
+    Run each base component once and persist per-item predictions for offline tuning.
+
+    Columns:
+      idx, title, actual, p1_rag, p2_specialist, p3_dnn
+    """
+    path = Path(cache_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    total = len(items) if size is None else min(size, len(items))
+    start = max(0, min(start_at, total))
+    mode = "a" if append and path.exists() else "w"
+
+    rows = []
+    for i in range(start, total):
+        item = items[i]
+        p1 = _to_float_price(rag_fn(item))
+        p2 = _to_float_price(specialist_fn(item))
+        p3 = _to_float_price(dnn_fn(item))
+        rows.append(
+            {
+                "idx": i,
+                "title": item.title,
+                "actual": float(item.price),
+                "p1_rag": p1,
+                "p2_specialist": p2,
+                "p3_dnn": p3,
+            }
+        )
+        if (i - start + 1) % max(1, progress_every) == 0:
+            print(f"Cached {i - start + 1}/{total - start} items...")
+
+    df = pd.DataFrame(rows)
+    if mode == "a":
+        df.to_csv(path, mode="a", index=False, header=False)
+    else:
+        df.to_csv(path, index=False)
+    print(f"Wrote {len(df)} rows -> {path}")
+    return df
+
+
+def grid_search_ensemble_weights(
+    cache_path: str = "logs/val_component_preds.csv",
+    step: float = 0.05,
+    top_k: int = 10,
+) -> tuple[dict, pd.DataFrame]:
+    """
+    Offline MAE sweep for weights where w1 + w2 + w3 = 1.
+
+    Returns:
+      (best_row_dict, leaderboard_df_sorted_by_mae)
+    """
+    df = pd.read_csv(cache_path)
+    required = {"actual", "p1_rag", "p2_specialist", "p3_dnn"}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"Missing columns in cache: {sorted(missing)}")
+
+    units = int(round(1 / step))
+    if abs(units * step - 1.0) > 1e-9:
+        raise ValueError("step must divide 1.0 exactly, e.g. 0.2, 0.1, 0.05, 0.02")
+
+    rows = []
+    actual = df["actual"]
+    p1 = df["p1_rag"]
+    p2 = df["p2_specialist"]
+    p3 = df["p3_dnn"]
+
+    for i in range(units + 1):
+        w1 = i * step
+        for j in range(units - i + 1):
+            w2 = j * step
+            w3 = 1.0 - w1 - w2
+            pred = p1 * w1 + p2 * w2 + p3 * w3
+            mae = (pred - actual).abs().mean()
+            rows.append(
+                {"w1_rag": round(w1, 6), "w2_specialist": round(w2, 6), "w3_dnn": round(w3, 6), "mae": float(mae)}
+            )
+
+    leaderboard = pd.DataFrame(rows).sort_values("mae", ascending=True).reset_index(drop=True)
+    best = leaderboard.iloc[0].to_dict()
+    print(
+        "Best weights: "
+        f"rag={best['w1_rag']:.2f}, specialist={best['w2_specialist']:.2f}, dnn={best['w3_dnn']:.2f} "
+        f"| val_MAE=${best['mae']:.2f}"
+    )
+    return best, leaderboard.head(top_k)
